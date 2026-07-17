@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>AI Image Caption Studio</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
+  </head>
+  <body>
+    <div class="bg-orb orb-one"></div>
+    <div class="bg-orb orb-two"></div>
+
+    <main class="app-shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Browser-based AI captioning</p>
+          <h1>AI Image Caption Studio</h1>
+          <p class="hero-copy">
+            Upload an image and generate descriptive captions using AI models running directly in your browser.
+          </p>
+        </div>
+        <div class="status-pill" id="modelStatus">Model loading...</div>
+      </header>
+
+      <section class="panel upload-panel">
+        <div class="dropzone" id="dropzone">
+          <input id="fileInput" type="file" accept="image/*" />
+          <label for="fileInput">Browse image</label>
+          <p>Drag and drop an image here or click to browse.</p>
+        </div>
+
+        <div class="actions">
+          <button id="detectBtn" class="btn primary" disabled>Generate caption</button>
+          <button id="copyBtn" class="btn secondary" disabled>Copy caption</button>
+          <button id="downloadBtn" class="btn secondary" disabled>Download caption</button>
+          <button id="clearBtn" class="btn ghost">Clear</button>
+        </div>
+      </section>
+
+      <section class="dashboard">
+        <article class="card preview-card">
+          <div class="card-header">
+            <h2>Preview</h2>
+            <span id="imageMeta">No image selected</span>
+          </div>
+
+          <div class="image-stage" id="imageStage">
+            <img id="previewImage" alt="Selected preview" />
+            <canvas id="overlayCanvas"></canvas>
+            <div class="empty-state" id="emptyState">Upload an image to begin.</div>
+          </div>
+        </article>
+
+        <article class="card results-card">
+          <div class="card-header">
+            <h2>Generated caption</h2>
+            <span class="badge" id="statusBadge">Ready</span>
+          </div>
+
+          <div class="loading-state hidden" id="loadingState">
+            <span class="spinner"></span>
+            <p>Analyzing image and generating caption…</p>
+          </div>
+
+          <blockquote id="captionOutput">No caption yet.</blockquote>
+
+          <div class="results-section">
+            <h3>Detected objects</h3>
+            <ul id="objectList"></ul>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <script src="script.js"></script>
+  </body>
+</html>
