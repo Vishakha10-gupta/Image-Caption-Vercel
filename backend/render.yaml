@@ -3,8 +3,16 @@ services:
     name: image-caption-api
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT --workers 1
     envVars:
       - key: PORT
         value: 8000
+      - key: PYTHON_VERSION
+        value: 3.11
+      - key: TRANSFORMERS_CACHE
+        value: /tmp/cache
+      - key: HF_HOME
+        value: /tmp/cache
+      - key: ALLOWED_ORIGINS
+        value: https://*.vercel.app,https://*.vercel.com
     plan: free

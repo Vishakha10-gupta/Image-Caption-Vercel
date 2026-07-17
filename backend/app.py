@@ -16,11 +16,27 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Image Caption API")
 
+# Enhanced CORS middleware for production
+# Get allowed origins from environment variable, fallback to localhost and Vercel
+allowed_origins = os.environ.get("ALLOWED_ORIGINS", "").split(",")
+if not allowed_origins or allowed_origins == [""]:
+    allowed_origins = [
+        "http://localhost:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:8000",
+        "https://*.vercel.app",
+        "https://*.vercel.com",
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["Content-Type", "X-Request-ID"],
+    max_age=600,
 )
 
 # Global variables for model

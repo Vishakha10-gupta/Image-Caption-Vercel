@@ -14,127 +14,59 @@ const loadingState = document.getElementById('loadingState');
 const modelStatus = document.getElementById('modelStatus');
 const statusBadge = document.getElementById('statusBadge');
 
-let model = null;
 let currentImageUrl = null;
 let currentFileName = '';
-let currentDetections = [];
 let currentCaption = '';
 
-const PRIORITY_OBJECTS = ['person', 'dog', 'cat', 'bicycle', 'car', 'bus', 'chair', 'laptop', 'phone', 'bottle', 'tree', 'bird', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe'];
+// Backend API URL - configure this for your Render deployment
+const BACKEND_API_URL = import.meta.env?.VITE_BACKEND_API_URL || 
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') 
+  ? 'http://localhost:8000' 
+  : 'https://your-render-app.onrender.com';
 
-async function loadModel() {
-  if (model) {
-    return model;
-  }
-
-  modelStatus.textContent = 'Loading model...';
-  loadingState.classList.remove('hidden');
-  statusBadge.textContent = 'Loading';
-
+async function checkBackendHealth() {
   try {
-    model = await cocoSsd.load();
-    modelStatus.textContent = 'Model ready';
-    statusBadge.textContent = 'Ready';
-    loadingState.classList.add('hidden');
-    detectBtn.disabled = false;
-    return model;
+    const response = await fetch(`${BACKEND_API_URL}/health`);
+    if (response.ok) {
+      const data = await response.json();
+      modelStatus.textContent = data.model_loaded ? 'Backend ready' : 'Backend loading';
+      statusBadge.textContent = 'Ready';
+      detectBtn.disabled = false;
+      return true;
+    }
+    throw new Error('Health check failed');
   } catch (error) {
-    modelStatus.textContent = 'Model failed';
+    modelStatus.textContent = 'Backend unavailable';
     statusBadge.textContent = 'Error';
-    captionOutput.textContent = 'The model could not be loaded. Please refresh the page.';
-    loadingState.classList.add('hidden');
+    console.error('Backend health check failed:', error);
+    return false;
+  }
+}
+
+async function requestBackendCaption(imageBase64) {
+  try {
+    const response = await fetch(`${BACKEND_API_URL}/api/caption`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        image: imageBase64.split(',')[1], // Remove data URL prefix
+        name: currentFileName || 'image.jpg'
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Backend request failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.caption;
+  } catch (error) {
+    console.error('Backend caption request failed:', error);
     throw error;
   }
-}
-
-function generateCaption(detections) {
-  if (!detections.length) {
-    return 'An image with no clearly detected objects.';
-  }
-
-  const sorted = [...detections].sort((a, b) => b.score - a.score);
-  const primary = sorted[0];
-  const relevant = sorted.filter((item) => PRIORITY_OBJECTS.includes(item.className) || item.score > 0.4);
-  const topObjects = relevant.slice(0, 4).map((item) => item.className);
-
-  if (!topObjects.length) {
-    return `A ${primary.className} is visible in the image.`;
-  }
-
-  const uniqueObjects = [...new Set(topObjects)];
-
-  if (uniqueObjects.length === 1) {
-    return `A ${uniqueObjects[0]} is visible in the image.`;
-  }
-
-  if (uniqueObjects.length === 2) {
-    return `A ${uniqueObjects[0]} and a ${uniqueObjects[1]} are visible in the image.`;
-  }
-
-  if (uniqueObjects.length === 3) {
-    return `A ${uniqueObjects[0]}, ${uniqueObjects[1]}, and ${uniqueObjects[2]} are visible in the image.`;
-  }
-
-  return `A ${uniqueObjects[0]}, ${uniqueObjects[1]}, ${uniqueObjects[2]}, and ${uniqueObjects[3]} are visible in the image.`;
-}
-
-function resetCanvas() {
-  const context = overlayCanvas.getContext('2d');
-  context.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-}
-
-function drawBoxes(detections) {
-  const context = overlayCanvas.getContext('2d');
-  const width = previewImage.naturalWidth || previewImage.clientWidth;
-  const height = previewImage.naturalHeight || previewImage.clientHeight;
-  overlayCanvas.width = width;
-  overlayCanvas.height = height;
-  context.clearRect(0, 0, width, height);
-
-  const scaleX = width / previewImage.naturalWidth;
-  const scaleY = height / previewImage.naturalHeight;
-
-  detections.forEach((item) => {
-    const [x, y, boxWidth, boxHeight] = item.bbox;
-    const rectX = x * scaleX;
-    const rectY = y * scaleY;
-    const rectWidth = boxWidth * scaleX;
-    const rectHeight = boxHeight * scaleY;
-
-    context.strokeStyle = item.score > 0.6 ? '#65d6ff' : '#ffe082';
-    context.lineWidth = 3;
-    context.strokeRect(rectX, rectY, rectWidth, rectHeight);
-
-    context.fillStyle = 'rgba(7, 17, 32, 0.8)';
-    const labelHeight = 24;
-    context.fillRect(rectX, Math.max(rectY - labelHeight, 0), 120, labelHeight);
-    context.fillStyle = '#ffffff';
-    context.font = '14px Inter, sans-serif';
-    context.fillText(`${item.className} ${(item.score * 100).toFixed(0)}%`, rectX + 8, Math.max(rectY - 7, 12));
-  });
-}
-
-function renderDetections(detections) {
-  objectList.innerHTML = '';
-  if (!detections.length) {
-    objectList.innerHTML = '<li>No objects detected.</li>';
-    return;
-  }
-
-  detections.forEach((item) => {
-    const li = document.createElement('li');
-    li.innerHTML = `<strong>${item.className}</strong> · ${(item.score * 100).toFixed(1)}% confidence`;
-    objectList.appendChild(li);
-  });
-}
-
-function updateCaption(detections, caption = null) {
-  currentDetections = detections;
-  currentCaption = caption || generateCaption(detections);
-  captionOutput.textContent = currentCaption;
-  renderDetections(detections);
-  copyBtn.disabled = false;
-  downloadBtn.disabled = false;
 }
 
 async function analyzeImage(file) {
@@ -145,17 +77,17 @@ async function analyzeImage(file) {
   downloadBtn.disabled = true;
 
   try {
-    const modelInstance = await loadModel();
-    const imageElement = previewImage;
-    const predictions = await modelInstance.detect(imageElement);
-    const filtered = predictions.filter((item) => item.score >= 0.35);
-    updateCaption(filtered);
-    drawBoxes(filtered);
+    const caption = await requestBackendCaption(currentImageUrl);
+    currentCaption = caption;
+    captionOutput.textContent = caption;
+    objectList.innerHTML = '<li>Caption generated by BLIP model</li>';
+    copyBtn.disabled = false;
+    downloadBtn.disabled = false;
     statusBadge.textContent = 'Complete';
   } catch (error) {
     statusBadge.textContent = 'Error';
-    captionOutput.textContent = 'Detection failed. Please try another image.';
-    objectList.innerHTML = '<li>Unable to analyze the image.</li>';
+    captionOutput.textContent = 'Failed to generate caption. Please check if the backend is running.';
+    objectList.innerHTML = '<li>Backend connection failed</li>';
     console.error(error);
   } finally {
     loadingState.classList.add('hidden');
@@ -173,7 +105,6 @@ function setPreview(file) {
         imageMeta.textContent = `${file.name} · ${(file.size / 1024).toFixed(1)} KB`;
         currentImageUrl = event.target.result;
         currentFileName = file.name;
-        resetCanvas();
         captionOutput.textContent = 'No caption yet.';
         objectList.innerHTML = '';
         copyBtn.disabled = true;
@@ -198,11 +129,10 @@ function clearImage() {
   copyBtn.disabled = true;
   downloadBtn.disabled = true;
   detectBtn.disabled = true;
-  currentDetections = [];
   currentCaption = '';
   currentFileName = '';
   currentImageUrl = null;
-  modelStatus.textContent = model ? 'Model ready' : 'Model loading...';
+  checkBackendHealth();
   statusBadge.textContent = 'Ready';
 }
 
@@ -214,7 +144,7 @@ function copyCaption() {
   navigator.clipboard.writeText(currentCaption).then(() => {
     statusBadge.textContent = 'Copied';
     setTimeout(() => {
-      statusBadge.textContent = currentDetections.length ? 'Complete' : 'Ready';
+      statusBadge.textContent = currentCaption ? 'Complete' : 'Ready';
     }, 1200);
   });
 }
@@ -279,9 +209,5 @@ dropzone.addEventListener('drop', async (event) => {
 });
 
 window.addEventListener('load', async () => {
-  try {
-    await loadModel();
-  } catch (error) {
-    console.error(error);
-  }
+  checkBackendHealth();
 });

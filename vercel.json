@@ -2,5 +2,10 @@
   "version": 2,
   "buildCommand": null,
   "outputDirectory": null,
-  "framework": null
+  "framework": null,
+  "env": {
+    "VITE_BACKEND_API_URL": {
+      "description": "Backend API URL for Render deployment"
+    }
+  }
 }
