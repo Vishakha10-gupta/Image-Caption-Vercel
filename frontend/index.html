@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>AI Image Caption Studio</title>
     <link rel="stylesheet" href="style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
   </head>
   <body>
     <div class="bg-orb orb-one"></div>
@@ -13,13 +15,13 @@
     <main class="app-shell">
       <header class="hero">
         <div>
-          <p class="eyebrow">AI-powered image captioning</p>
+          <p class="eyebrow">Browser-based AI captioning</p>
           <h1>AI Image Caption Studio</h1>
           <p class="hero-copy">
-            Upload an image and generate descriptive captions using advanced AI models.
+            Upload an image and generate descriptive captions using AI models running directly in your browser.
           </p>
         </div>
-        <div class="status-pill" id="modelStatus">Backend ready</div>
+        <div class="status-pill" id="modelStatus">Model loading...</div>
       </header>
 
       <section class="panel upload-panel">
@@ -46,6 +48,7 @@
 
           <div class="image-stage" id="imageStage">
             <img id="previewImage" alt="Selected preview" />
+            <canvas id="overlayCanvas"></canvas>
             <div class="empty-state" id="emptyState">Upload an image to begin.</div>
           </div>
         </article>
@@ -58,10 +61,15 @@
 
           <div class="loading-state hidden" id="loadingState">
             <span class="spinner"></span>
-            <p>Generating caption with AI model…</p>
+            <p>Analyzing image and generating caption…</p>
           </div>
 
           <blockquote id="captionOutput">No caption yet.</blockquote>
+
+          <div class="results-section">
+            <h3>Detected objects</h3>
+            <ul id="objectList"></ul>
+          </div>
         </article>
       </section>
     </main>
