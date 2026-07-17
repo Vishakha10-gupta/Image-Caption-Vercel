@@ -8,6 +8,11 @@ from PIL import Image
 import io
 import base64
 import os
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Image Caption API")
 
@@ -30,13 +35,36 @@ class CaptionRequest(BaseModel):
 def load_model():
     global processor, model, device
     if processor is None or model is None:
-        print("Loading BLIP model...")
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-        model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
-        model.to(device)
-        model.eval()
-        print("BLIP model loaded successfully")
+        logger.info("Loading BLIP model...")
+        try:
+            # Use cache directory from environment variable
+            cache_dir = os.environ.get("TRANSFORMERS_CACHE", "/tmp/cache")
+            os.makedirs(cache_dir, exist_ok=True)
+            
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            logger.info(f"Using device: {device}")
+            
+            # Load model with optimizations for deployment
+            processor = BlipProcessor.from_pretrained(
+                "Salesforce/blip-image-captioning-base",
+                cache_dir=cache_dir
+            )
+            model = BlipForConditionalGeneration.from_pretrained(
+                "Salesforce/blip-image-captioning-base",
+                cache_dir=cache_dir,
+                torch_dtype=torch.float16 if device == "cuda" else torch.float32
+            )
+            model.to(device)
+            model.eval()
+            
+            # Optimize for inference
+            if device == "cuda":
+                model = torch.compile(model, mode="reduce-overhead")
+            
+            logger.info("BLIP model loaded successfully")
+        except Exception as e:
+            logger.error(f"Failed to load model: {e}")
+            raise
     return processor, model, device
 
 @app.get("/health")
@@ -53,11 +81,13 @@ async def generate_caption(request: CaptionRequest):
         image_data = base64.b64decode(request.image)
         image = Image.open(io.BytesIO(image_data)).convert('RGB')
         
-        # Generate caption
+        # Generate caption with error handling
         inputs = proc(image, return_tensors="pt").to(dev)
         with torch.no_grad():
-            out = mod.generate(**inputs, max_length=50)
+            out = mod.generate(**inputs, max_length=50, num_beams=4, early_stopping=True)
         caption = proc.decode(out[0], skip_special_tokens=True)
+        
+        logger.info(f"Generated caption: {caption[:50]}...")
         
         return JSONResponse({
             "caption": caption,
@@ -65,6 +95,7 @@ async def generate_caption(request: CaptionRequest):
             "model": "Salesforce/blip-image-captioning-base"
         })
     except Exception as e:
+        logger.error(f"Caption generation failed: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
@@ -79,11 +110,13 @@ async def generate_caption_upload(file: UploadFile = File(...)):
         image_data = await file.read()
         image = Image.open(io.BytesIO(image_data)).convert('RGB')
         
-        # Generate caption
+        # Generate caption with error handling
         inputs = proc(image, return_tensors="pt").to(dev)
         with torch.no_grad():
-            out = mod.generate(**inputs, max_length=50)
+            out = mod.generate(**inputs, max_length=50, num_beams=4, early_stopping=True)
         caption = proc.decode(out[0], skip_special_tokens=True)
+        
+        logger.info(f"Generated caption for {file.filename}: {caption[:50]}...")
         
         return JSONResponse({
             "caption": caption,
@@ -92,9 +125,20 @@ async def generate_caption_upload(file: UploadFile = File(...)):
             "filename": file.filename
         })
     except Exception as e:
+        logger.error(f"Caption generation failed for {file.filename}: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.on_event("startup")
+async def startup_event():
+    """Load model on startup to avoid cold start issues"""
+    logger.info("Starting up and loading model...")
+    try:
+        load_model()
+        logger.info("Model loaded successfully on startup")
+    except Exception as e:
+        logger.error(f"Failed to load model on startup: {e}")
 
 if __name__ == "__main__":
     import uvicorn
